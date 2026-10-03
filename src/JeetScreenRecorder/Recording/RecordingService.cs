@@ -36,6 +36,9 @@ public sealed class RecordingService : IRecordingService
     private string _partsDir = "", _finalPath = "";
     private long _finishedBytes, _droppedBase;
     private EncoderStats _cur = new(0, 0, 0, 0);
+    private Timer? _diskTimer;
+    private bool _diskWarned;
+    private string _stopReason = "";
 
     public RecordingService(ISettingsService settings, IStorageService storage, IEncoderDetector detector,
         IMonitorService monitors, IAudioCaptureService audio, Func<IVideoEncoder> encoderFactory)
@@ -141,6 +144,10 @@ public sealed class RecordingService : IRecordingService
             _clock.Restart();
             Set(RecordingState.Recording);
             AppLogger.Info("Recording started");
+            _diskWarned = false;
+            _stopReason = "";
+            _diskTimer?.Dispose();
+            _diskTimer = new Timer(_ => CheckDisk(), null, 5000, 5000);
         }
         finally { _gate.Release(); }
     }
@@ -269,6 +276,8 @@ public sealed class RecordingService : IRecordingService
         try
         {
             if (State == RecordingState.Idle || State == RecordingState.Finalizing) return;
+            _diskTimer?.Dispose();
+            _diskTimer = null;
             _clock.Stop();
             Set(RecordingState.Finalizing);
             try
@@ -278,14 +287,14 @@ public sealed class RecordingService : IRecordingService
                 var path = await RecordingFinalizer.FinalizeAsync(_segments.ToList(), _finalPath, _partsDir);
                 LastOutputPath = path;
                 AppLogger.Info($"Recording stopped after {_clock.Elapsed}; saved {path}");
-                Notice?.Invoke(this, $"Saved: {path}");
+                Notice?.Invoke(this, $"Saved: {path}" + (_stopReason.Length > 0 ? "\n" + _stopReason : ""));
             }
             catch (Exception ex)
             {
                 AppLogger.Error("Finalizing recording failed", ex);
                 Notice?.Invoke(this, $"Could not finish the video file: {ex.Message} The raw parts are kept in: {_partsDir}");
             }
-            finally { Set(RecordingState.Idle); }
+            finally { _stopReason = ""; Set(RecordingState.Idle); }
         }
         finally { _gate.Release(); }
     }
@@ -293,11 +302,7 @@ public sealed class RecordingService : IRecordingService
     private EncoderOptions BuildOptions(RecordingSettings s, EncoderInfo enc)
     {
         var mon = _monitors.Get(s.MonitorIndex);
-        var probe = new EncoderOptions
-        {
-            SourceWidth = mon.Width, SourceHeight = mon.Height,
-            OutputWidth = s.Width, OutputHeight = s.Height
-        };
+        var probe = CaptureOptionsFactory.Create(s, mon);
         var (w, h) = FfmpegArgsBuilder.OutputSize(probe);
         int kbps = s.BitrateKbps > 0
             ? s.BitrateKbps
@@ -305,15 +310,33 @@ public sealed class RecordingService : IRecordingService
         return probe with
         {
             EncoderId = enc.Id,
-            Fps = s.Fps,
-            MonitorIndex = mon.Index,
-            CaptureX = mon.X,
-            CaptureY = mon.Y,
             BitrateKbps = kbps,
-            Backend = s.CompatibleCapture ? CaptureBackend.Gdigrab : CaptureBackend.DesktopDuplication,
             AudioSampleRate = s.AudioSampleRate,
             AudioBitrateKbps = s.AudioBitrateKbps
         };
+    }
+
+    private void CheckDisk()
+    {
+        try
+        {
+            if (State != RecordingState.Recording && State != RecordingState.Paused) return;
+            var s = _settings.Current;
+            long free = _storage.GetFreeSpaceBytes(s.OutputFolder);
+            long min = s.MinFreeDiskMb * 1024L * 1024L;
+            if (free < min)
+            {
+                _stopReason = $"Recording was stopped automatically because free disk space fell below {s.MinFreeDiskMb} MB.";
+                AppLogger.Warn(_stopReason);
+                _ = Task.Run(StopAsync);
+            }
+            else if (free < min * 2 && !_diskWarned)
+            {
+                _diskWarned = true;
+                Notice?.Invoke(this, "Warning: disk space is running low.");
+            }
+        }
+        catch (Exception ex) { AppLogger.Warn($"Disk check failed: {ex.Message}"); }
     }
 
     private void Set(RecordingState s)

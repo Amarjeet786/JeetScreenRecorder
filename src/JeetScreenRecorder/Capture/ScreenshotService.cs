@@ -24,16 +24,9 @@ public sealed class ScreenshotService(ISettingsService settings, IMonitorService
         var ext = fmt is "jpg" or "webp" ? fmt : "png";
         var path = Path.Combine(dir, OutputNaming.Generate("Screenshot_", ext, DateTime.Now));
 
-        var mon = monitors.Get(s.MonitorIndex);
-        var o = new EncoderOptions
-        {
-            MonitorIndex = mon.Index, CaptureX = mon.X, CaptureY = mon.Y,
-            SourceWidth = mon.Width, SourceHeight = mon.Height,
-            Backend = s.CompatibleCapture ? CaptureBackend.Gdigrab : CaptureBackend.DesktopDuplication
-        };
-
+        var o = CaptureOptionsFactory.Create(s, monitors.Get(s.MonitorIndex)) with { Fps = 1 };
         var (code, err) = await FfmpegRunner.RunAsync(FfmpegArgsBuilder.BuildScreenshot(o, path), 20000);
-        if ((code != 0 || !File.Exists(path)) && o.Backend == CaptureBackend.DesktopDuplication)
+        if ((code != 0 || !File.Exists(path)) && o.Backend == CaptureBackend.DesktopDuplication && o.WindowHandle == 0)
         {
             AppLogger.Warn($"GPU screenshot failed, retrying with compatible capture: {err.Trim()}");
             o = o with { Backend = CaptureBackend.Gdigrab };

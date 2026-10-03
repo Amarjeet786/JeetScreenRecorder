@@ -8,10 +8,14 @@ public enum AnnotationTool
 
 public interface IAnnotationService
 {
+    bool IsVisible { get; }
+    event EventHandler? RecordToggleRequested;
     void ShowToolbar();
     void HideToolbar();
+    void ToggleToolbar();
     void SetTool(AnnotationTool tool);
     void Undo();
     void Redo();
     void ClearAll();
+    void CloseAll();
 }

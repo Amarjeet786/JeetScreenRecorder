@@ -4,6 +4,7 @@
         Title="Jeet Screen Recorder" Width="800" Height="860" MinWidth="700" MinHeight="620"
         Background="#12141A" WindowStartupLocation="CenterScreen">
     <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="B2V"/>
         <Style x:Key="BigButton" TargetType="Button">
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontSize" Value="16"/>
@@ -82,6 +83,8 @@
                                     Style="{StaticResource BigButton}" Background="#4B5563"/>
                             <Button Content="📷 Screenshot (F11)" Command="{Binding ScreenshotCommand}"
                                     Style="{StaticResource BigButton}" Background="#2A2F3A" FontSize="14"/>
+                            <Button Content="✏ Annotate (F8)" Command="{Binding AnnotateCommand}"
+                                    Style="{StaticResource BigButton}" Background="#7C3AED" FontSize="14"/>
                         </StackPanel>
                         <TextBlock Text="{Binding StatsText}" Foreground="#D1D5DB" FontSize="14"
                                    HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
@@ -93,6 +96,35 @@
                 <Border Style="{StaticResource Card}">
                     <StackPanel IsEnabled="{Binding CanEditSettings}">
                         <TextBlock Text="🖥  Screen &amp; video" Style="{StaticResource Heading}"/>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Preset" Style="{StaticResource Label}"/>
+                            <ComboBox Grid.Column="1" Margin="0,0,16,0"
+                                      ItemsSource="{Binding PresetOptions}" SelectedItem="{Binding SelectedPreset}"/>
+                            <TextBlock Grid.Column="2" Text="Record" Style="{StaticResource Label}"/>
+                            <ComboBox Grid.Column="3"
+                                      ItemsSource="{Binding CaptureAreaOptions}" SelectedItem="{Binding SelectedCaptureArea}"/>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10"
+                                    Visibility="{Binding IsRegionMode, Converter={StaticResource B2V}}">
+                            <Button Content="⬚ Select region…" Command="{Binding SelectRegionCommand}"
+                                    Style="{StaticResource BigButton}" Background="#2A2F3A" FontSize="13"
+                                    Padding="14,7" Margin="0,0,12,0"/>
+                            <TextBlock Text="{Binding RegionText}" Style="{StaticResource Label}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10"
+                                    Visibility="{Binding IsWindowMode, Converter={StaticResource B2V}}">
+                            <ComboBox Width="440" ItemsSource="{Binding WindowOptions}" DisplayMemberPath="Display"
+                                      SelectedItem="{Binding SelectedWindow}"/>
+                            <Button Content="↻ Refresh" Command="{Binding RefreshWindowsCommand}"
+                                    Style="{StaticResource BigButton}" Background="#2A2F3A" FontSize="13"
+                                    Padding="12,6" Margin="8,0,0,0"/>
+                        </StackPanel>
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -180,6 +212,8 @@
                     <StackPanel>
                         <TextBlock Text="{Binding EncoderText}" Foreground="#9AA3B2" FontSize="13" TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding OutputText}" Foreground="#6B7280" FontSize="12"
+                                   TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        <TextBlock Text="{Binding EstimateText}" Foreground="#9AA3B2" FontSize="12"
                                    TextWrapping="Wrap" Margin="0,4,0,0"/>
                         <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
                             <Button Content="📁 Open folder" Command="{Binding OpenFolderCommand}"

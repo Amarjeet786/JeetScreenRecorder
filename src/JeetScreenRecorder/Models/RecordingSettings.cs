@@ -15,6 +15,17 @@ public sealed class RecordingSettings
     public bool CompatibleCapture { get; set; } = false;   // true = GDI capture (any screen)
     public bool HideFromCapture { get; set; } = true;      // hide this app window from recordings
     public string ScreenshotFormat { get; set; } = "png";  // png | jpg | webp
+
+    // Capture area (monitor-relative physical pixels). Width 0 = no region chosen yet.
+    public int RegionX { get; set; }
+    public int RegionY { get; set; }
+    public int RegionWidth { get; set; }
+    public int RegionHeight { get; set; }
+
+    // Chosen at start time, never saved.
+    [System.Text.Json.Serialization.JsonIgnore] public long WindowHandle { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore] public int WindowWidth { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore] public int WindowHeight { get; set; }
     public int Width { get; set; } = 0;   // 0 = original
     public int Height { get; set; } = 0;  // 0 = original
     public int Fps { get; set; } = 60;

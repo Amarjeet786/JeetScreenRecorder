@@ -32,18 +32,29 @@ public static class FfmpegArgsBuilder
     private static void AppendVideoInput(StringBuilder sb, EncoderOptions o, int fps, bool mouse)
     {
         int m = mouse ? 1 : 0;
-        if (o.Backend == CaptureBackend.DesktopDuplication)
-            sb.Append($"-f lavfi -i \"ddagrab=output_idx={o.MonitorIndex}:framerate={fps}:draw_mouse={m}\" ");
+        if (o.WindowHandle != 0)
+        {
+            sb.Append($"-f gdigrab -framerate {fps} -draw_mouse {m} -i hwnd=0x{o.WindowHandle:X} ");
+        }
+        else if (o.Backend == CaptureBackend.DesktopDuplication)
+        {
+            var crop = o.UseCrop
+                ? $":video_size={o.SourceWidth}x{o.SourceHeight}:offset_x={o.CropX}:offset_y={o.CropY}"
+                : "";
+            sb.Append($"-f lavfi -i \"ddagrab=output_idx={o.MonitorIndex}:framerate={fps}:draw_mouse={m}{crop}\" ");
+        }
         else
+        {
             sb.Append($"-f gdigrab -framerate {fps} -draw_mouse {m} -offset_x {o.CaptureX} -offset_y {o.CaptureY} " +
                       $"-video_size {o.SourceWidth}x{o.SourceHeight} -i desktop ");
+        }
     }
 
     public static string Build(EncoderOptions o, string? outputPath, bool test = false)
     {
         var sb = new StringBuilder("-hide_banner -y -loglevel error ");
         if (!test) sb.Append("-progress pipe:1 -nostats ");
-        bool gpuFrames = o.Backend == CaptureBackend.DesktopDuplication;
+        bool gpuFrames = o.Backend == CaptureBackend.DesktopDuplication && o.WindowHandle == 0;
 
         // ---- inputs (all inputs must come before any output option) ----
         AppendVideoInput(sb, o, o.Fps, o.DrawMouse);
@@ -70,7 +81,7 @@ public static class FfmpegArgsBuilder
         var sb = new StringBuilder("-hide_banner -y -loglevel error ");
         AppendVideoInput(sb, o, 1, mouse: false);
         sb.Append("-frames:v 1 ");
-        if (o.Backend == CaptureBackend.DesktopDuplication) sb.Append("-vf \"hwdownload,format=bgra\" ");
+        if (o.Backend == CaptureBackend.DesktopDuplication && o.WindowHandle == 0) sb.Append("-vf \"hwdownload,format=bgra\" ");
         sb.Append($"\"{outputPath}\"");
         return sb.ToString();
     }

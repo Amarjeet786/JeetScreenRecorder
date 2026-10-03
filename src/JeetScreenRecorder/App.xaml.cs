@@ -1,5 +1,6 @@
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
+using JeetScreenRecorder.Annotation;
 using JeetScreenRecorder.Audio;
 using JeetScreenRecorder.Capture;
 using JeetScreenRecorder.Hotkeys;
@@ -32,6 +33,10 @@ public partial class App : Application
         sc.AddSingleton<ISettingsService, JsonSettingsService>();
         sc.AddSingleton<IStorageService, StorageService>();
         sc.AddSingleton<IMonitorService, MonitorService>();
+        sc.AddSingleton<IWindowService, WindowService>();
+        sc.AddSingleton<IRegionSelector, RegionSelectorService>();
+        sc.AddSingleton<AnnotationService>();
+        sc.AddSingleton<IAnnotationService>(p => p.GetRequiredService<AnnotationService>());
         sc.AddSingleton<IScreenshotService, ScreenshotService>();
         sc.AddSingleton<IAudioCaptureService, AudioMixerEngine>();
         sc.AddSingleton<GlobalHotkeyService>();
