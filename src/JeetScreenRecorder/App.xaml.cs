@@ -4,6 +4,7 @@ using JeetScreenRecorder.Recording;
 using JeetScreenRecorder.Settings;
 using JeetScreenRecorder.Storage;
 using JeetScreenRecorder.UI;
+using JeetScreenRecorder.VideoEncoding;
 using JeetScreenRecorder.Utils;
 
 namespace JeetScreenRecorder;
@@ -27,6 +28,9 @@ public partial class App : Application
         var sc = new ServiceCollection();
         sc.AddSingleton<ISettingsService, JsonSettingsService>();
         sc.AddSingleton<IStorageService, StorageService>();
+        sc.AddSingleton<IEncoderDetector, EncoderDetector>();
+        sc.AddTransient<IVideoEncoder, FfmpegSegmentEncoder>();
+        sc.AddSingleton<Func<IVideoEncoder>>(p => () => p.GetRequiredService<IVideoEncoder>());
         sc.AddSingleton<IRecordingService, RecordingService>();
         sc.AddSingleton<MainViewModel>();
         sc.AddTransient<MainWindow>();

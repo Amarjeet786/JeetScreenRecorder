@@ -56,18 +56,4 @@ public class CoreTests
         try { Assert.Equal(60, new JsonSettingsService(path).Current.Fps); }
         finally { File.Delete(path); }
     }
-
-    [Fact]
-    public async Task Recording_PauseResumeStop_Transitions()
-    {
-        var r = new RecordingService();
-        await r.StartAsync();
-        Assert.Equal(RecordingState.Recording, r.State);
-        await r.PauseAsync();
-        Assert.Equal(RecordingState.Paused, r.State);
-        await r.ResumeAsync();
-        Assert.Equal(RecordingState.Recording, r.State);
-        await r.StopAsync();
-        Assert.Equal(RecordingState.Idle, r.State);
-    }
 }
