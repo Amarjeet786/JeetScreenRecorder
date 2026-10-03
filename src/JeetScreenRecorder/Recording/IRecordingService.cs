@@ -13,6 +13,7 @@ public interface IRecordingService
     TimeSpan Elapsed { get; }
     RecordingStats Stats { get; }
     string EncoderName { get; }
+    string CaptureName { get; }
     string? LastOutputPath { get; }
     event EventHandler? StateChanged;
     event EventHandler<string>? Notice;

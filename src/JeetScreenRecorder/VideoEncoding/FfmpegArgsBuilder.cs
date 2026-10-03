@@ -29,30 +29,49 @@ public static class FfmpegArgsBuilder
     public static (int Width, int Height) OutputSize(EncoderOptions o) =>
         NeedsScale(o) ? (o.OutputWidth, o.OutputHeight) : (o.SourceWidth, o.SourceHeight);
 
+    private static void AppendVideoInput(StringBuilder sb, EncoderOptions o, int fps, bool mouse)
+    {
+        int m = mouse ? 1 : 0;
+        if (o.Backend == CaptureBackend.DesktopDuplication)
+            sb.Append($"-f lavfi -i \"ddagrab=output_idx={o.MonitorIndex}:framerate={fps}:draw_mouse={m}\" ");
+        else
+            sb.Append($"-f gdigrab -framerate {fps} -draw_mouse {m} -offset_x {o.CaptureX} -offset_y {o.CaptureY} " +
+                      $"-video_size {o.SourceWidth}x{o.SourceHeight} -i desktop ");
+    }
+
     public static string Build(EncoderOptions o, string? outputPath, bool test = false)
     {
         var sb = new StringBuilder("-hide_banner -y -loglevel error ");
         if (!test) sb.Append("-progress pipe:1 -nostats ");
-        int mouse = o.DrawMouse ? 1 : 0;
+        bool gpuFrames = o.Backend == CaptureBackend.DesktopDuplication;
 
-        if (o.Backend == CaptureBackend.DesktopDuplication)
-        {
-            sb.Append($"-f lavfi -i \"ddagrab=output_idx={o.MonitorIndex}:framerate={o.Fps}:draw_mouse={mouse}\" ");
-            // NVENC can take GPU frames directly (zero-copy) when no scaling is needed.
-            bool cpuPath = !IsNvenc(o.EncoderId) || NeedsScale(o);
-            if (cpuPath) sb.Append($"-vf \"{CpuFilter(o, fromGpuFrames: true)}\" ");
-        }
-        else
-        {
-            sb.Append($"-f gdigrab -framerate {o.Fps} -draw_mouse {mouse} -i desktop ");
-            sb.Append($"-vf \"{CpuFilter(o, fromGpuFrames: false)}\" ");
-        }
+        // ---- inputs (all inputs must come before any output option) ----
+        AppendVideoInput(sb, o, o.Fps, o.DrawMouse);
+        bool hasAudio = !test && !string.IsNullOrEmpty(o.AudioPipePath);
+        if (hasAudio)
+            sb.Append($"-thread_queue_size 1024 -f s16le -ar {o.AudioSampleRate} -ac 2 -i \"{o.AudioPipePath}\" ");
+
+        // ---- video filters ----
+        // NVENC can take GPU frames directly (zero-copy) when no scaling is needed.
+        bool cpuPath = !gpuFrames || !IsNvenc(o.EncoderId) || NeedsScale(o);
+        if (cpuPath) sb.Append($"-vf \"{CpuFilter(o, gpuFrames)}\" ");
 
         AppendEncoder(sb, o);
         sb.Append($"-g {o.Fps * 2} ");
+        if (hasAudio) sb.Append($"-c:a aac -b:a {o.AudioBitrateKbps}k -ar {o.AudioSampleRate} ");
 
         if (test) sb.Append("-frames:v 5 -f null -");
         else sb.Append($"\"{outputPath}\"");
+        return sb.ToString();
+    }
+
+    public static string BuildScreenshot(EncoderOptions o, string outputPath)
+    {
+        var sb = new StringBuilder("-hide_banner -y -loglevel error ");
+        AppendVideoInput(sb, o, 1, mouse: false);
+        sb.Append("-frames:v 1 ");
+        if (o.Backend == CaptureBackend.DesktopDuplication) sb.Append("-vf \"hwdownload,format=bgra\" ");
+        sb.Append($"\"{outputPath}\"");
         return sb.ToString();
     }
 

@@ -2,7 +2,7 @@ using JeetScreenRecorder.Models;
 
 namespace JeetScreenRecorder.Capture;
 
-public sealed record MonitorInfo(int Index, string Name, int Width, int Height, int RefreshRate, bool IsPrimary);
+public sealed record MonitorInfo(int Index, string Name, int Width, int Height, int RefreshRate, bool IsPrimary, int X, int Y, string DeviceName);
 public sealed record CaptureRegion(int X, int Y, int Width, int Height);
 public sealed record CaptureTarget(CaptureSource Source, int MonitorIndex, nint WindowHandle, CaptureRegion? Region);
 

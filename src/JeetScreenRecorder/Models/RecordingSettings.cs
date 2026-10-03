@@ -12,6 +12,9 @@ public sealed class RecordingSettings
     // Video
     public CaptureSource Source { get; set; } = CaptureSource.FullScreen;
     public int MonitorIndex { get; set; } = 0;
+    public bool CompatibleCapture { get; set; } = false;   // true = GDI capture (any screen)
+    public bool HideFromCapture { get; set; } = true;      // hide this app window from recordings
+    public string ScreenshotFormat { get; set; } = "png";  // png | jpg | webp
     public int Width { get; set; } = 0;   // 0 = original
     public int Height { get; set; } = 0;  // 0 = original
     public int Fps { get; set; } = 60;

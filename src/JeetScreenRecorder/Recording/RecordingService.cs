@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using JeetScreenRecorder.Audio;
+using JeetScreenRecorder.Capture;
 using JeetScreenRecorder.Models;
 using JeetScreenRecorder.Settings;
 using JeetScreenRecorder.Storage;
@@ -8,14 +10,16 @@ using JeetScreenRecorder.VideoEncoding;
 namespace JeetScreenRecorder.Recording;
 
 /// <summary>
-/// Real recording pipeline: ffmpeg (ddagrab + hardware encoder) writes crash-safe MKV segments.
-/// Pause = close current segment, Resume = new segment, Stop = join all segments into ONE file.
+/// Real recording pipeline: ffmpeg (ddagrab/gdigrab + hardware encoder + mixed audio pipe) writes crash-safe
+/// MKV segments. Pause = close current segment, Resume = new segment, Stop = join all into ONE file.
 /// </summary>
 public sealed class RecordingService : IRecordingService
 {
     private readonly ISettingsService _settings;
     private readonly IStorageService _storage;
     private readonly IEncoderDetector _detector;
+    private readonly IMonitorService _monitors;
+    private readonly IAudioCaptureService _audio;
     private readonly Func<IVideoEncoder> _encoderFactory;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Stopwatch _clock = new();
@@ -24,20 +28,25 @@ public sealed class RecordingService : IRecordingService
     private Task<IReadOnlyList<EncoderInfo>>? _detectTask;
     private IReadOnlyList<EncoderInfo>? _available;
     private IVideoEncoder? _enc;
+    private AudioPipeSink? _sink;
     private EncoderOptions _opts = new();
+    private bool _useAudio;
     private string _encName = "";
     private string _resolution = "";
     private string _partsDir = "", _finalPath = "";
     private long _finishedBytes, _droppedBase;
     private EncoderStats _cur = new(0, 0, 0, 0);
 
-    public RecordingService(ISettingsService settings, IStorageService storage,
-        IEncoderDetector detector, Func<IVideoEncoder> encoderFactory)
+    public RecordingService(ISettingsService settings, IStorageService storage, IEncoderDetector detector,
+        IMonitorService monitors, IAudioCaptureService audio, Func<IVideoEncoder> encoderFactory)
     {
         _settings = settings;
         _storage = storage;
         _detector = detector;
+        _monitors = monitors;
+        _audio = audio;
         _encoderFactory = encoderFactory;
+        _audio.Warning += (_, msg) => Notice?.Invoke(this, msg);
     }
 
     public RecordingState State { get; private set; } = RecordingState.Idle;
@@ -51,6 +60,15 @@ public sealed class RecordingService : IRecordingService
         State != RecordingState.Idle && _encName.Length > 0 ? _encName
         : _available == null ? "detecting…"
         : EncoderSelector.Choose(_available, _settings.Current.Codec, _settings.Current.Encoder).DisplayName;
+
+    public string CaptureName
+    {
+        get
+        {
+            bool gdi = State != RecordingState.Idle ? _opts.Backend == CaptureBackend.Gdigrab : _settings.Current.CompatibleCapture;
+            return gdi ? "Compatible (GDI)" : "GPU (DXGI)";
+        }
+    }
 
     public async Task InitializeAsync() => await EnsureEncodersAsync();
 
@@ -98,10 +116,24 @@ public sealed class RecordingService : IRecordingService
             _cur = new EncoderStats(0, 0, 0, 0);
             Stats = new RecordingStats(0, 0, 0, _resolution);
 
-            AppLogger.Info($"Encoder selected: {enc.Id}; capture {_resolution} @ {_opts.Fps} FPS; bitrate {_opts.BitrateKbps} kbps");
+            _useAudio = s.MicEnabled || s.SystemAudioEnabled;
+            if (_useAudio)
+            {
+                _audio.SetGains(s.MicVolume, s.SystemVolume);
+                if (_audio.IsRunning)
+                {
+                    _audio.SetMicDevice(s.MicDeviceId);
+                    _audio.SetEnabled(s.MicEnabled, s.SystemAudioEnabled);
+                }
+                else _audio.Start(s.MicDeviceId, s.MicEnabled, s.SystemAudioEnabled, s.AudioSampleRate);
+            }
+
+            AppLogger.Info($"Encoder selected: {enc.Id}; capture {_resolution} @ {_opts.Fps} FPS; bitrate {_opts.BitrateKbps} kbps; " +
+                           $"monitor {_opts.MonitorIndex} ({_opts.Backend}); audio={_useAudio}");
             try { await StartSegmentAsync(); }
             catch
             {
+                if (_useAudio) _audio.Stop();
                 try { Directory.Delete(_partsDir, true); } catch { }
                 throw;
             }
@@ -118,23 +150,64 @@ public sealed class RecordingService : IRecordingService
         var path = Path.Combine(_partsDir, $"part{_segments.Count + 1:000}.mkv");
         var encoder = _encoderFactory();
         encoder.StatsUpdated += OnStats;
+        AudioPipeSink? sink = null;
         try
         {
-            await encoder.StartAsync(_opts, path);
+            var opts = _opts;
+            Task? connect = null;
+            if (_useAudio)
+            {
+                sink = new AudioPipeSink();
+                opts = opts with { AudioPipePath = sink.FfmpegPath };
+                connect = sink.ConnectAsync(TimeSpan.FromSeconds(8));
+            }
+            await encoder.StartAsync(opts, path);
+            if (connect != null)
+            {
+                await connect;
+                _audio.SetSink(sink!.Stream);
+            }
         }
         catch (EncoderStartException ex)
         {
             AppLogger.Error("Encoder failed to start", ex);
+            _audio.SetSink(null);
+            sink?.Dispose();
             await encoder.DisposeAsync();
-            if (_opts.Backend == CaptureBackend.Gdigrab && _opts.EncoderId == "libx264") throw;
 
-            _opts = _opts with { Backend = CaptureBackend.Gdigrab, EncoderId = "libx264" };
-            _encName = "Software (x264)";
-            Notice?.Invoke(this, "Your selected hardware encoder is unavailable. The application has switched to software encoding.");
-            await StartSegmentAsync();
-            return;
+            if (_opts.Backend == CaptureBackend.DesktopDuplication)
+            {
+                _opts = _opts with { Backend = CaptureBackend.Gdigrab };
+                Notice?.Invoke(this, "GPU screen capture is not available on this display. Switched to compatible capture.");
+                await StartSegmentAsync();
+                return;
+            }
+            if (_opts.EncoderId != "libx264")
+            {
+                _opts = _opts with { EncoderId = "libx264" };
+                _encName = "Software (x264)";
+                Notice?.Invoke(this, "Your selected hardware encoder is unavailable. The application has switched to software encoding.");
+                await StartSegmentAsync();
+                return;
+            }
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            _audio.SetSink(null);
+            sink?.Dispose();
+            await encoder.DisposeAsync();
+            throw new InvalidOperationException("Audio could not be connected to the recorder. Try again or turn audio off.");
+        }
+        catch
+        {
+            _audio.SetSink(null);
+            sink?.Dispose();
+            await encoder.DisposeAsync();
+            throw;
         }
         _enc = encoder;
+        _sink = sink;
         _segments.Add(path);
     }
 
@@ -146,14 +219,20 @@ public sealed class RecordingService : IRecordingService
 
     private async Task StopCurrentSegmentAsync()
     {
+        _audio.SetSink(null);
         var enc = _enc;
+        var sink = _sink;
         _enc = null;
-        if (enc == null) return;
-        await enc.StopAsync();
-        await enc.DisposeAsync();
-        try { _finishedBytes += new FileInfo(_segments[^1]).Length; } catch { }
-        _droppedBase += _cur.DroppedFrames;
-        _cur = new EncoderStats(0, 0, 0, 0);
+        _sink = null;
+        if (enc != null)
+        {
+            await enc.StopAsync();
+            await enc.DisposeAsync();
+            try { _finishedBytes += new FileInfo(_segments[^1]).Length; } catch { }
+            _droppedBase += _cur.DroppedFrames;
+            _cur = new EncoderStats(0, 0, 0, 0);
+        }
+        sink?.Dispose();
     }
 
     public async Task PauseAsync()
@@ -195,6 +274,7 @@ public sealed class RecordingService : IRecordingService
             try
             {
                 await StopCurrentSegmentAsync();
+                _audio.Stop();
                 var path = await RecordingFinalizer.FinalizeAsync(_segments.ToList(), _finalPath, _partsDir);
                 LastOutputPath = path;
                 AppLogger.Info($"Recording stopped after {_clock.Elapsed}; saved {path}");
@@ -210,10 +290,14 @@ public sealed class RecordingService : IRecordingService
         finally { _gate.Release(); }
     }
 
-    private static EncoderOptions BuildOptions(RecordingSettings s, EncoderInfo enc)
+    private EncoderOptions BuildOptions(RecordingSettings s, EncoderInfo enc)
     {
-        var (sw, sh) = ScreenInfo.PrimarySize();
-        var probe = new EncoderOptions { SourceWidth = sw, SourceHeight = sh, OutputWidth = s.Width, OutputHeight = s.Height };
+        var mon = _monitors.Get(s.MonitorIndex);
+        var probe = new EncoderOptions
+        {
+            SourceWidth = mon.Width, SourceHeight = mon.Height,
+            OutputWidth = s.Width, OutputHeight = s.Height
+        };
         var (w, h) = FfmpegArgsBuilder.OutputSize(probe);
         int kbps = s.BitrateKbps > 0
             ? s.BitrateKbps
@@ -222,9 +306,13 @@ public sealed class RecordingService : IRecordingService
         {
             EncoderId = enc.Id,
             Fps = s.Fps,
-            MonitorIndex = s.MonitorIndex,
+            MonitorIndex = mon.Index,
+            CaptureX = mon.X,
+            CaptureY = mon.Y,
             BitrateKbps = kbps,
-            Backend = CaptureBackend.DesktopDuplication
+            Backend = s.CompatibleCapture ? CaptureBackend.Gdigrab : CaptureBackend.DesktopDuplication,
+            AudioSampleRate = s.AudioSampleRate,
+            AudioBitrateKbps = s.AudioBitrateKbps
         };
     }
 

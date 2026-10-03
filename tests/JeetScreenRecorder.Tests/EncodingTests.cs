@@ -78,4 +78,46 @@ public class EncodingTests
         Assert.Equal("h264_qsv", EncoderSelector.Choose(all, VideoCodec.H264, "h264_qsv").Id);
         Assert.Equal("libx264", EncoderSelector.Choose(new List<EncoderInfo>(), VideoCodec.Hevc, "auto").Id);
     }
+
+    [Fact]
+    public void Audio_InputComesBeforeFilters_AndAacIsUsed()
+    {
+        var o = Opts("libx264") with { AudioPipePath = @"\\.\pipe\x", AudioSampleRate = 48000, AudioBitrateKbps = 192 };
+        var a = FfmpegArgsBuilder.Build(o, "out.mkv");
+        Assert.Contains("-f s16le -ar 48000 -ac 2", a);
+        Assert.Contains("-c:a aac -b:a 192k", a);
+        Assert.True(a.IndexOf("-f s16le") < a.IndexOf("-vf"));
+    }
+
+    [Fact]
+    public void NoAudioPipe_MeansNoAudioArgs()
+    {
+        var a = FfmpegArgsBuilder.Build(Opts("h264_nvenc"), "out.mkv");
+        Assert.DoesNotContain("s16le", a);
+        Assert.DoesNotContain("-c:a", a);
+    }
+
+    [Fact]
+    public void Gdigrab_UsesSelectedMonitorGeometry()
+    {
+        var o = Opts("libx264", 0, 0, CaptureBackend.Gdigrab) with { CaptureX = -1920, CaptureY = 0 };
+        var a = FfmpegArgsBuilder.Build(o, "out.mkv");
+        Assert.Contains("-offset_x -1920 -offset_y 0 -video_size 1920x1080", a);
+    }
+
+    [Fact]
+    public void Ddagrab_UsesSelectedMonitorIndex()
+    {
+        var o = Opts("h264_nvenc") with { MonitorIndex = 1 };
+        Assert.Contains("output_idx=1", FfmpegArgsBuilder.Build(o, "out.mkv"));
+    }
+
+    [Fact]
+    public void Screenshot_Args_CaptureOneFrame()
+    {
+        var a = FfmpegArgsBuilder.BuildScreenshot(Opts("libx264"), "s.png");
+        Assert.Contains("-frames:v 1", a);
+        Assert.Contains("ddagrab", a);
+        Assert.EndsWith("\"s.png\"", a);
+    }
 }

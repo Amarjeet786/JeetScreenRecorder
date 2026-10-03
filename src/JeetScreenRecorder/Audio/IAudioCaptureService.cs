@@ -3,16 +3,18 @@ namespace JeetScreenRecorder.Audio;
 public enum AudioDeviceKind { Microphone, SystemOutput }
 public sealed record AudioDeviceInfo(string Id, string Name, AudioDeviceKind Kind);
 
-public sealed class AudioLevelEventArgs(double micPeak, double systemPeak) : EventArgs
+public interface IAudioCaptureService : IDisposable
 {
-    public double MicPeak { get; } = micPeak;
-    public double SystemPeak { get; } = systemPeak;
-}
-
-public interface IAudioCaptureService : IAsyncDisposable
-{
-    IReadOnlyList<AudioDeviceInfo> GetDevices();
-    event EventHandler<AudioLevelEventArgs>? LevelsChanged;
-    Task StartAsync(string? micDeviceId, bool captureSystem, int sampleRate, int channels);
-    Task StopAsync();
+    IReadOnlyList<AudioDeviceInfo> GetMicrophones();
+    bool IsRunning { get; }
+    event EventHandler<string>? Warning;
+    void Start(string? micDeviceId, bool mic, bool system, int sampleRate);
+    void Stop();
+    void SetGains(double micGain, double systemGain);
+    void SetEnabled(bool mic, bool system);
+    void SetMicDevice(string? micDeviceId);
+    /// <summary>Receives mixed PCM (s16le, stereo). Pass null to stop writing.</summary>
+    void SetSink(Stream? sink);
+    /// <summary>Peak levels (0..1) since the last call.</summary>
+    (double Mic, double System) ReadPeaks();
 }
