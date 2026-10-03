@@ -1,0 +1,79 @@
+<Window x:Class="JeetScreenRecorder.UI.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Jeet Screen Recorder" Width="760" Height="580" MinWidth="640" MinHeight="520"
+        Background="#12141A" WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="BigButton" TargetType="Button">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="28,14"/>
+            <Setter Property="Margin" Value="6"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="12"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.85"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="bd" Property="Opacity" Value="0.35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14" HorizontalAlignment="Center">
+            <TextBlock Text="Jeet Screen Recorder" Foreground="White" FontSize="22"
+                       FontWeight="SemiBold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Created by Amarjeet K Gupta  •  WhatsApp: 8707018073"
+                       Foreground="#9AA3B2" FontSize="12" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="#1C1F27" CornerRadius="16" Padding="32">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                <TextBlock Text="{Binding StatusText}" Foreground="#9AA3B2" FontSize="16"
+                           HorizontalAlignment="Center"/>
+                <TextBlock Text="{Binding TimerText}" Foreground="White" FontSize="64"
+                           FontWeight="Light" HorizontalAlignment="Center" Margin="0,8,0,24"/>
+
+                <Button Content="● Start Recording" Command="{Binding StartCommand}"
+                        Style="{StaticResource BigButton}" Background="#E5484D" FontSize="20"
+                        Padding="40,18"/>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <Button Content="{Binding PauseLabel}" Command="{Binding PauseResumeCommand}"
+                            Style="{StaticResource BigButton}" Background="#3B82F6"/>
+                    <Button Content="■ Stop" Command="{Binding StopCommand}"
+                            Style="{StaticResource BigButton}" Background="#4B5563"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding InfoText}" Foreground="#9AA3B2" FontSize="13"
+                           HorizontalAlignment="Center" Margin="0,20,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="2" Margin="0,12,0,0" HorizontalAlignment="Center">
+            <TextBlock Text="Created by Amarjeet K Gupta  •  WhatsApp: 8707018073"
+                       Foreground="#9AA3B2" FontSize="12" HorizontalAlignment="Center"/>
+            <TextBlock Text="🔒 Your recordings remain on your computer."
+                       Foreground="#6B7280" FontSize="11" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>
