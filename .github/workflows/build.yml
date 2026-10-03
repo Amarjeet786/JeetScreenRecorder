@@ -36,15 +36,16 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -o publish
 
-      - name: Bundle FFmpeg (users need no manual install)
+           - name: Bundle FFmpeg (users need no manual install)
         shell: pwsh
         run: |
           $url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
           Invoke-WebRequest $url -OutFile ffmpeg.zip
           Expand-Archive ffmpeg.zip -DestinationPath ffmpeg-tmp
           New-Item -ItemType Directory -Force publish/ffmpeg | Out-Null
-          Copy-Item (Get-ChildItem ffmpeg-tmp -Directory | Select-Object -First 1).FullName/bin/ffmpeg.exe publish/ffmpeg/
-          Copy-Item (Get-ChildItem ffmpeg-tmp -Directory | Select-Object -First 1).FullName/bin/ffprobe.exe publish/ffmpeg/
+          $bin = Join-Path (Get-ChildItem ffmpeg-tmp -Directory | Select-Object -First 1).FullName "bin"
+          Copy-Item (Join-Path $bin "ffmpeg.exe") "publish/ffmpeg/"
+          Copy-Item (Join-Path $bin "ffprobe.exe") "publish/ffmpeg/"
 
       - name: Zip portable build
         shell: pwsh
