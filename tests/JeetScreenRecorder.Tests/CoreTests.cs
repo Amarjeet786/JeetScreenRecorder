@@ -67,13 +67,43 @@ public class CoreTests
     {
         var s = new RecordingSettings { WebcamEnabled = true, WebcamName = "Cam", WebcamSize = WebcamSize.Small, WebcamPosition = WebcamCorner.TopRight };
         var mon = new Capture.MonitorInfo(0, "m", 1920, 1080, 60, true, 0, 0, "");
+        // Full screen / region: the floating webcam window shows the camera, ffmpeg must NOT open it a second time.
+        Assert.True(VideoEncoding.CaptureOptionsFactory.UsesFloatingWebcam(s));
         var o = VideoEncoding.CaptureOptionsFactory.Create(s, mon);
-        Assert.Equal("Cam", o.WebcamName);
+        Assert.Null(o.WebcamName);
         Assert.Equal(15, o.WebcamPercent);
         Assert.Equal(WebcamCorner.TopRight, o.WebcamCorner);
 
+        // Single-window capture cannot see the floating window, so ffmpeg overlays the camera itself.
+        s.Source = CaptureSource.Window;
+        s.WindowHandle = 0x1234; s.WindowWidth = 800; s.WindowHeight = 600;
+        Assert.False(VideoEncoding.CaptureOptionsFactory.UsesFloatingWebcam(s));
+        Assert.Equal("Cam", VideoEncoding.CaptureOptionsFactory.Create(s, mon).WebcamName);
+
         s.WebcamEnabled = false;
         Assert.Null(VideoEncoding.CaptureOptionsFactory.Create(s, mon).WebcamName);
+    }
+
+    [Fact]
+    public void WebcamOverlay_Settings_RoundTrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"psr_{Guid.NewGuid():N}.json");
+        try
+        {
+            var a = new JsonSettingsService(path);
+            a.Current.WebcamOverlayPlaced = true;
+            a.Current.WebcamOverlayX = 321;
+            a.Current.WebcamOverlayY = 123;
+            a.Current.WebcamOverlayWidth = 480;
+            a.Save();
+
+            var b = new JsonSettingsService(path).Current;
+            Assert.True(b.WebcamOverlayPlaced);
+            Assert.Equal(321, b.WebcamOverlayX);
+            Assert.Equal(123, b.WebcamOverlayY);
+            Assert.Equal(480, b.WebcamOverlayWidth);
+        }
+        finally { File.Delete(path); }
     }
 
     [Fact]

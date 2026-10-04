@@ -24,6 +24,13 @@ When a segment ends, ffmpeg joins video (copied) and audio (AAC). If audio is si
 Logs: `%APPDATA%\JeetScreenRecorder\Logs\<date>.log` (search for "Audio started" / "Segment ... joined").
 Fine-tune lip-sync: add `"AudioSyncOffsetMs": 100` to `%APPDATA%\JeetScreenRecorder\settings.json` (+ = audio later, - = audio earlier).
 
+## Build 12 – webcam you can move and resize
+- With *Add to video* ticked, the camera now shows on the screen in a small floating window while recording. Because it is on the screen,
+  it is recorded exactly as you see it.
+- **Move:** drag it with the left mouse button. **Bigger / smaller:** mouse wheel, the `+` / `−` buttons that appear on hover, or the corner handle `◢`.
+  `✕` hides the camera. Size and position are remembered; changing Position / Size in the Webcam card resets them.
+- Single *Window* capture cannot see other windows, so there the camera is still added in a fixed corner (not movable).
+
 ## Build 11 – what is new
 - **Webcam:** tick *Add to video* in the Webcam card. The camera appears as a picture-in-picture (corner and size are selectable, optional mirror).
   Use *Detect* to find cameras and *Test camera* to see a live picture before recording. If the camera cannot be opened
