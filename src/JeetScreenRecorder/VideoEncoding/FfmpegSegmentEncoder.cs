@@ -13,6 +13,7 @@ public sealed class FfmpegSegmentEncoder : IVideoEncoder
     private readonly StringBuilder _err = new();
     private double _fps;
     private long _size, _drop, _frames;
+    private double _outTime;
 
     public event EventHandler<EncoderStats>? StatsUpdated;
 
@@ -45,12 +46,14 @@ public sealed class FfmpegSegmentEncoder : IVideoEncoder
         var first = await Task.WhenAny(exited.Task, Task.Delay(1500));
         if (first == exited.Task)
         {
+            await Task.Run(() => p.WaitForExit()); // let all stderr lines arrive
             string text;
             lock (_err) text = _err.ToString().Trim();
+            AppLogger.Info($"ffmpeg full output: {text}");
             var last = text.Split('\n').LastOrDefault()?.Trim() ?? "";
             _proc = null;
             p.Dispose();
-            throw new EncoderStartException($"The video encoder could not start. {last}");
+            throw new EncoderStartException($"The video encoder could not start. {last}", text);
         }
     }
 
@@ -67,7 +70,8 @@ public sealed class FfmpegSegmentEncoder : IVideoEncoder
             case "total_size": long.TryParse(val, out _size); break;
             case "drop_frames": long.TryParse(val, out _drop); break;
             case "frame": long.TryParse(val, out _frames); break;
-            case "progress": StatsUpdated?.Invoke(this, new EncoderStats(_fps, _size, _drop, _frames)); break;
+            case "out_time_us": if (long.TryParse(val, out var us) && us > 0) _outTime = us / 1_000_000.0; break;
+            case "progress": StatsUpdated?.Invoke(this, new EncoderStats(_fps, _size, _drop, _frames, _outTime)); break;
         }
     }
 

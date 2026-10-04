@@ -23,7 +23,7 @@ public sealed class AudioMixerEngine : IAudioCaptureService
     private volatile Stream? _sink;
     private volatile bool _micOn, _sysOn;
     private double _micGain = 1.0, _sysGain = 0.8;
-    private double _micPeak, _sysPeak;
+    private double _micPeak, _sysPeak, _sinkPeak;
     private int _rate = 48000;
     private string? _micDeviceId;
 
@@ -75,7 +75,7 @@ public sealed class AudioMixerEngine : IAudioCaptureService
 
     public void SetGains(double micGain, double systemGain)
     {
-        _micGain = Math.Clamp(micGain, 0, 2);
+        _micGain = Math.Clamp(micGain, 0, 4);      // up to 400% (boost for quiet external microphones)
         _sysGain = Math.Clamp(systemGain, 0, 2);
     }
 
@@ -100,7 +100,13 @@ public sealed class AudioMixerEngine : IAudioCaptureService
         StartMic(en);
     }
 
-    public void SetSink(Stream? sink) => _sink = sink;
+    public void SetSink(Stream? sink)
+    {
+        if (sink != null) lock (_peakLock) _sinkPeak = 0;
+        _sink = sink;
+    }
+
+    public double SinkPeak { get { lock (_peakLock) return _sinkPeak; } }
 
     public (double Mic, double System) ReadPeaks()
     {
@@ -225,26 +231,34 @@ public sealed class AudioMixerEngine : IAudioCaptureService
             if (_micOn && msp != null) { try { msp.Read(micBuf, 0, samples); } catch { } }
             if (_sysOn && ssp != null) { try { ssp.Read(sysBuf, 0, samples); } catch { } }
 
-            float mg = (float)_micGain, sg = (float)_sysGain, mPeak = 0, sPeak = 0;
+            float mg = (float)_micGain, sg = (float)_sysGain, mPeak = 0, sPeak = 0, xPeak = 0;
             for (int i = 0; i < samples; i++)
             {
                 float m = micBuf[i] * mg, s = sysBuf[i] * sg;
                 float a = Math.Abs(m); if (a > mPeak) mPeak = a;
                 a = Math.Abs(s); if (a > sPeak) sPeak = a;
                 float v = m + s;
-                if (v > 1f) v = 1f; else if (v < -1f) v = -1f;
+                // Soft limiter: loud peaks are rounded off smoothly instead of being cut hard (hard cut = crackling when boosted).
+                float av = Math.Abs(v);
+                if (av > 0.8f)
+                {
+                    float lim = 0.8f + 0.2f * MathF.Tanh((av - 0.8f) / 0.2f);
+                    v = v < 0 ? -lim : lim;
+                }
+                a = Math.Abs(v); if (a > xPeak) xPeak = a;
                 short sv = (short)(v * 32767f);
                 pcm[i * 2] = (byte)(sv & 0xFF);
                 pcm[i * 2 + 1] = (byte)((sv >> 8) & 0xFF);
             }
 
+            var sink = _sink;
             lock (_peakLock)
             {
                 if (mPeak > _micPeak) _micPeak = mPeak;
                 if (sPeak > _sysPeak) _sysPeak = sPeak;
+                if (sink != null && xPeak > _sinkPeak) _sinkPeak = xPeak;
             }
 
-            var sink = _sink;
             if (sink != null)
             {
                 try { sink.Write(pcm, 0, samples * 2); }

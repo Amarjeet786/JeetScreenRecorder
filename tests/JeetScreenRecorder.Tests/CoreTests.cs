@@ -23,12 +23,58 @@ public class CoreTests
     }
 
     [Theory]
-    [InlineData(1920, 1080, 60, 12000)]
-    [InlineData(1920, 1080, 30, 6000)]
-    [InlineData(2560, 1440, 60, 24000)]
-    [InlineData(3840, 2160, 60, 45000)]
+    [InlineData(1920, 1080, 60, 16000)]
+    [InlineData(1920, 1080, 30, 8000)]
+    [InlineData(1280, 720, 60, 8000)]
+    [InlineData(2560, 1440, 60, 30000)]
+    [InlineData(3840, 2160, 60, 60000)]
     public void RecommendedBitrate_FollowsTiers(int w, int h, int fps, int expected) =>
         Assert.Equal(expected, SizeEstimator.RecommendedBitrateKbps(w, h, fps));
+
+    [Fact]
+    public void Quality_Presets_AreOrdered()
+    {
+        var m = new[] { QualityPreset.Low, QualityPreset.Medium, QualityPreset.High, QualityPreset.VeryHigh, QualityPreset.Lossless }
+            .Select(VideoEncoding.FfmpegArgsBuilder.QualityMultiplier).ToArray();
+        Assert.Equal(m.OrderBy(x => x).ToArray(), m);
+        Assert.Equal(1.0, VideoEncoding.FfmpegArgsBuilder.QualityMultiplier(QualityPreset.High));
+    }
+
+    [Fact]
+    public void Settings_Webcam_RoundTrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"psr_{Guid.NewGuid():N}.json");
+        try
+        {
+            var a = new JsonSettingsService(path);
+            a.Current.WebcamEnabled = true;
+            a.Current.WebcamName = "Integrated Camera";
+            a.Current.WebcamPosition = WebcamCorner.TopLeft;
+            a.Current.WebcamSize = WebcamSize.Large;
+            a.Save();
+
+            var b = new JsonSettingsService(path).Current;
+            Assert.True(b.WebcamEnabled);
+            Assert.Equal("Integrated Camera", b.WebcamName);
+            Assert.Equal(WebcamCorner.TopLeft, b.WebcamPosition);
+            Assert.Equal(WebcamSize.Large, b.WebcamSize);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void CaptureOptions_CarryWebcamSettings()
+    {
+        var s = new RecordingSettings { WebcamEnabled = true, WebcamName = "Cam", WebcamSize = WebcamSize.Small, WebcamPosition = WebcamCorner.TopRight };
+        var mon = new Capture.MonitorInfo(0, "m", 1920, 1080, 60, true, 0, 0, "");
+        var o = VideoEncoding.CaptureOptionsFactory.Create(s, mon);
+        Assert.Equal("Cam", o.WebcamName);
+        Assert.Equal(15, o.WebcamPercent);
+        Assert.Equal(WebcamCorner.TopRight, o.WebcamCorner);
+
+        s.WebcamEnabled = false;
+        Assert.Null(VideoEncoding.CaptureOptionsFactory.Create(s, mon).WebcamName);
+    }
 
     [Fact]
     public void Settings_RoundTrip()

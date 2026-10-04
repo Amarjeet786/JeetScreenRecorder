@@ -23,7 +23,12 @@ public static class CaptureOptionsFactory
             SourceHeight = mon.Height,
             OutputWidth = s.Width,
             OutputHeight = s.Height,
-            Backend = s.CompatibleCapture ? CaptureBackend.Gdigrab : CaptureBackend.DesktopDuplication
+            Backend = s.CompatibleCapture ? CaptureBackend.Gdigrab : CaptureBackend.DesktopDuplication,
+            ForceCpuFrames = s.DisableZeroCopy,
+            WebcamName = s.WebcamEnabled && !string.IsNullOrWhiteSpace(s.WebcamName) ? s.WebcamName : null,
+            WebcamCorner = s.WebcamPosition,
+            WebcamMirror = s.WebcamMirror,
+            WebcamPercent = s.WebcamSize switch { WebcamSize.Small => 15, WebcamSize.Large => 30, _ => 22 }
         };
 
         if (s.Source == CaptureSource.Window && s.WindowHandle != 0 && s.WindowWidth > 0 && s.WindowHeight > 0)

@@ -10,6 +10,7 @@ using JeetScreenRecorder.Storage;
 using JeetScreenRecorder.UI;
 using JeetScreenRecorder.VideoEncoding;
 using JeetScreenRecorder.Utils;
+using JeetScreenRecorder.Webcam;
 
 namespace JeetScreenRecorder;
 
@@ -38,6 +39,7 @@ public partial class App : Application
         sc.AddSingleton<AnnotationService>();
         sc.AddSingleton<IAnnotationService>(p => p.GetRequiredService<AnnotationService>());
         sc.AddSingleton<IScreenshotService, ScreenshotService>();
+        sc.AddSingleton<IWebcamService, WebcamService>();
         sc.AddSingleton<IAudioCaptureService, AudioMixerEngine>();
         sc.AddSingleton<GlobalHotkeyService>();
         sc.AddSingleton<IHotkeyService>(p => p.GetRequiredService<GlobalHotkeyService>());
