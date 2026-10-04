@@ -207,6 +207,8 @@
                                     </StackPanel>
                                 </Grid>
 
+                                <TextBlock Style="{StaticResource HintText}" Margin="0,0,0,10" TextWrapping="Wrap"
+                                           Text="While recording the camera shows on screen: drag it to move, use the mouse wheel or the corner handle to make it bigger or smaller."/>
                                 <CheckBox Style="{StaticResource ModernCheck}" Content="Mirror the camera picture"
                                           IsChecked="{Binding WebcamMirror}" Margin="0,0,0,10"/>
 

@@ -436,6 +436,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public bool IsBusy => _rec.State != RecordingState.Idle;
 
+    public RecordingSettings Settings => _s;
+    public void ShowNotice(string text) => Message = text;
+
     public void PersistSettings()
     {
         try { _settings.Save(); }
@@ -507,6 +510,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             int i = Array.IndexOf(WebcamPositionOptions, value);
             if (i < 0) return;
             _s.WebcamPosition = (WebcamCorner)i;
+            _s.WebcamOverlayPlaced = false;   // use the chosen corner again
             PersistSettings();
             OnPropertyChanged();
         }
@@ -520,6 +524,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             int i = Array.IndexOf(WebcamSizeOptions, value);
             if (i < 0) return;
             _s.WebcamSize = (WebcamSize)i;
+            _s.WebcamOverlayWidth = 0;        // use the chosen size again
             PersistSettings();
             OnPropertyChanged();
         }
